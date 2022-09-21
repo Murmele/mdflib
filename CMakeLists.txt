@@ -10,12 +10,19 @@ option(BUILD_SHARED_LIBS "Static libraries are preferred." OFF)
 option(MDF_BUILD_DOC "Build documentation. Requires Doxygen and Release mode." ON)
 option(MDF_BUILD_TEST "Build Google unit tests. Requires Google Test." ON)
 option(MDF_BUILD_TOOL "Build tools like the MDF Viewer. Requires WxWidgets." ON)
+option(MDF_BUILD_QT "Use Qt instead of boost lib to build the mdf library" OFF)
 set(COMP_DIR "k:" CACHE PATH "Components root directory. Components like Boost, wxWidgets.")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_DEBUG_POSTFIX d)
 
-include("script/boost.cmake")
+if (${MDF_BUILD_QT})
+	add_compile_definitions(USE_QT)
+endif()
+
+if (NOT ${MDF_BUILD_QT})
+	include("script/boost.cmake")
+endif()
 include("script/utillib.cmake")
 include("script/zlib.cmake")
 include("script/expat.cmake")
@@ -24,7 +31,14 @@ include("script/wxwidgets.cmake")
 include("script/googletest.cmake")
 include("script/doxygen.cmake")
 
+if (NOT ${MDF_BUILD_QT})
+	set(PLATFORM_SRC src/boost/platform.cpp)
+else()
+	set(PLATFORM_SRC src/qt/platform.cpp)
+endif()
+
 add_library(mdf STATIC
+	${PLATFORM_SRC}
         src/iblock.cpp src/iblock.h
         src/mdffile.cpp include/mdf/mdffile.h
         src/idblock.cpp src/idblock.h
@@ -101,7 +115,12 @@ target_include_directories(mdf PUBLIC
         $<INSTALL_INTERFACE:include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         )
-target_include_directories(mdf PRIVATE ${Boost_INCLUDE_DIRS})
+if (NOT ${MDF_BUILD_QT})
+	target_include_directories(mdf PRIVATE ${Boost_INCLUDE_DIRS})
+	target_include_directories(mdf PRIVATE src/boost/platform.h)
+else()
+	target_include_directories(mdf PRIVATE src/qt/platform.h
+endif()
 target_include_directories(mdf PRIVATE ${utillib_SOURCE_DIR}/include)
 target_include_directories(mdf PRIVATE ${ZLIB_INCLUDE_DIRS})
 
