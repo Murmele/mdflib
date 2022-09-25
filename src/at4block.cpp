@@ -7,12 +7,12 @@
 #include <cerrno>
 #include "at4block.h"
 #include "mdf/mdfhelper.h"
-#include "util/logstream.h"
+#include "mdf/mdflogstream.h"
 #include "mdf/zlibutil.h"
 #include "mdf/cryptoutil.h"
+#include "platform.h"
 
 using namespace std::filesystem;
-using namespace util::log;
 
 namespace {
 
@@ -20,6 +20,8 @@ constexpr size_t kIndexNext = 0;
 constexpr size_t kIndexFilename = 1;
 constexpr size_t kIndexType = 2;
 constexpr size_t kIndexMd = 3;
+
+using namespace mdf;
 
 std::string MakeFlagString(uint16_t flag) {
   std::ostringstream s;
@@ -64,14 +66,14 @@ bool FileToBuffer(const std::string& filename, mdf::ByteArray& dest) {
     if (size > 0) {
       dest.resize(size, 0);
       std::FILE* file = nullptr;
-      fopen_s(&file, filename.c_str(), "rb");
+      Platform::fileopen(&file, filename.c_str(), "rb");
       if (file != nullptr) {
         const auto nof_bytes = fread(dest.data(), 1, size, file);
         if (nof_bytes < size) {
           dest.resize(nof_bytes);
         }
       } else {
-        LOG_ERROR() << "Failed to open file. File: " << filename;
+        MDF_ERROR() << "Failed to open file. File: " << filename;
         dest.clear();
         return false;
       }
@@ -80,7 +82,7 @@ bool FileToBuffer(const std::string& filename, mdf::ByteArray& dest) {
     }
 
   } catch (const std::exception& err) {
-    LOG_ERROR() << "File error when reading file to byte array. Error: " << err.what() << ", File: " << filename;
+    MDF_ERROR() << "File error when reading file to byte array. Error: " << err.what() << ", File: " << filename;
     return false;
   }
   return true;
@@ -158,7 +160,7 @@ size_t At4Block::Write(std::FILE *file) {
   try {
    path filename(filename_);
    if (!std::filesystem::exists(filename)) {
-     LOG_ERROR() << "Attachment File doesn't exist. File: " << filename_;
+     MDF_ERROR() << "Attachment File doesn't exist. File: " << filename_;
      return 0;
    }
 
@@ -171,19 +173,19 @@ size_t At4Block::Write(std::FILE *file) {
    if (IsEmbedded() && IsCompressed()) {
      const bool compress = Deflate(filename_, data_buffer);
      if (!compress) {
-       LOG_ERROR() << "Compress failure. File: " << filename;
+       MDF_ERROR() << "Compress failure. File: " << filename;
        return 0;
      }
    } else if (IsEmbedded()) {
      const auto buffer = FileToBuffer(filename_, data_buffer);
      if (!buffer) {
-       LOG_ERROR() << "File to buffer failure. File: " << filename;
+       MDF_ERROR() << "File to buffer failure. File: " << filename;
        return 0;
      }
    }
 
   } catch (const std::exception& err) {
-    LOG_ERROR() << "Attachment File error. Error: " << err.what() << ", File: " << filename_;
+    MDF_ERROR() << "Attachment File error. Error: " << err.what() << ", File: " << filename_;
     return 0;
   }
 

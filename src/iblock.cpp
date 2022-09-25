@@ -7,64 +7,46 @@
 #include <ios>
 #include <thread>
 #include <chrono>
-#include <boost/algorithm/string.hpp>
-#include <util/ixmlfile.h>
-#include <util/logstream.h>
+#include "mdf/mdflogstream.h"
+#include <stdio.h>
 #include "iblock.h"
 #include "md4block.h"
 #include "tx3block.h"
+#include "ixmlfile.h"
 
 using namespace std::chrono_literals;
-using namespace util::log;
 
 namespace mdf::detail {
 
-std::fpos_t GetFilePosition(std::FILE *file) {
-  std::fpos_t curr = 0;
-  auto get = std::fgetpos(file, &curr);
-  if (get != 0) {
+int64_t GetFilePosition(std::FILE *file) {
+  const auto pos = Platform::ftell64(file);
+  if (pos == -1) {
     throw std::ios_base::failure("Failed to get a file position");
   }
-  return curr;
+  return pos;
 }
 
-void SetFilePosition(std::FILE *file, std::fpos_t position) {
-  std::fpos_t curr = 0;
-  auto get = std::fgetpos(file, &curr);
-  if (get != 0) {
-    throw std::ios_base::failure("Failed to get a file position");
-  }
+void SetFilePosition(std::FILE *file, int64_t position) {
+  // To check if we are able to get a file position
+  auto pos = GetFilePosition(file);
 
   // Fast check if it already is in position
-
-  if (curr == position) {
+  if (pos == position) {
     return;
   }
-  fpos_t temp = position;
-  auto set = std::fsetpos(file, &temp);
-  if (set != 0) {
-    throw std::ios_base::failure("Failed to set a file position");
-  }
-  if (temp != position) {
+
+  if (Platform::fseek64(file, position, SEEK_SET)) {
     throw std::ios_base::failure("Failed to set a file position");
   }
 }
 
 void SetFirstFilePosition(std::FILE *file) {
-#if (_MSC_VER)
-  _fseeki64(file, 0, SEEK_SET);
-#else
-  fseeko64(file, 0, SEEK_SET);
-#endif
+    SetFilePosition(file, 0);
 }
 
 size_t StepFilePosition(std::FILE *file, size_t steps) {
-#if (_MSC_VER)
-  _fseeki64(file, static_cast<int64_t>(steps) , SEEK_CUR);
-#else
-  fseeko64(file, static_cast<int64_t>(steps), SEEK_CUR);
-#endif
-  return steps;
+    Platform::fseek64(file, steps, SEEK_CUR);
+    return steps;
 }
 
 std::string ReadBlockType(std::FILE *file) {
@@ -117,7 +99,7 @@ size_t ReadStr(std::FILE *file, std::string &dest, const size_t size) {
     }
   }
   dest = temp.str();
-  boost::trim(dest);
+  MdfHelper::Trim(dest);
   return size;
 }
 
@@ -151,7 +133,7 @@ bool OpenMdfFile(FILE *&file, const std::string &filename, const std::string &mo
   }
 
   for (size_t ii = 0; ii < 6'000; ++ii) {
-    const auto open = fopen_s(&file, filename.c_str(), mode.c_str());
+    const auto open = Platform::fileopen(&file, filename.c_str(), mode.c_str());
     switch (open) {
       case EEXIST:
       case EACCES:
@@ -167,7 +149,7 @@ bool OpenMdfFile(FILE *&file, const std::string &filename, const std::string &mo
           fclose(file);
           file = nullptr;
         }
-        LOG_ERROR() << "File doesn't exist. File: " << filename;
+        MDF_ERROR() << "File doesn't exist. File: " << filename;
         return false;
 
       default:
@@ -176,7 +158,7 @@ bool OpenMdfFile(FILE *&file, const std::string &filename, const std::string &mo
             fclose(file);
             file = nullptr;
           }
-          LOG_ERROR() << "Failed to open the file. File: " << filename
+          MDF_ERROR() << "Failed to open the file. File: " << filename
                       << ". Error: " << strerror(open) << " (" << open << ")";
           return false;
         }
@@ -185,7 +167,7 @@ bool OpenMdfFile(FILE *&file, const std::string &filename, const std::string &mo
     }
   }
   if (file == nullptr) {
-    LOG_ERROR() << "Failed to open the file due to lock timeout (5 s). File: " << filename;
+    MDF_ERROR() << "Failed to open the file due to lock timeout (5 s). File: " << filename;
   }
   return file != nullptr;
 
@@ -315,7 +297,7 @@ std::string IBlock::Comment() const {
     return md != nullptr ? md->TxComment() : "";
 }
 
-const IBlock *IBlock::Find(fpos_t index) const {
+const IBlock *IBlock::Find(int64_t index) const {
   if (file_position_ == index) {
     return this;
   }
@@ -384,11 +366,7 @@ size_t IBlock::Update(std::FILE *file) {
 }
 
 void IBlock::SetLastFilePosition(std::FILE *file) const {
-#if (_MSC_VER)
-  _fseeki64(file, 0, SEEK_END);
-#else
-  fseeko64(file, 0, SEEK_END);
-#endif
+  Platform::fseek64(file, 0, SEEK_END);
   if (IsMdf4()) { // Well if its MDF4 file
     // Fill to align with 64 bits alignment
     for ( auto pos = GetFilePosition(file); (pos % 8) != 0; pos = GetFilePosition(file) ) {
@@ -470,7 +448,7 @@ void IBlock::CreateMd4Block() {
   std::ostringstream root_name;
   root_name << BlockType() << "comment";
 
-  auto xml = util::xml::CreateXmlFile();
+  auto xml = CreateXmlFile();
   auto& root = xml->RootName(root_name.str());
 
   if (md_comment_ ) {

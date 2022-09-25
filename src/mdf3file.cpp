@@ -7,9 +7,7 @@
 #include <stdexcept>
 #include <cstdio>
 #include "mdf3file.h"
-#include "util/logstream.h"
-
-using namespace util::log;
+#include "mdf/mdflogstream.h"
 
 namespace mdf::detail {
 
@@ -93,7 +91,7 @@ const Hd3Block &Mdf3File::Hd() const {
   return *hd_block_;
 }
 
-const IBlock *Mdf3File::Find(fpos_t id) const {
+const IBlock *Mdf3File::Find(int64_t id) const {
   if (id_block_) {
     const auto* p = id_block_->Find(id);
     if (p != nullptr) {
@@ -115,18 +113,18 @@ IDataGroup *Mdf3File::CreateDataGroup() {
 
 bool Mdf3File::Write(std::FILE* file) {
   if (file == nullptr) {
-    LOG_ERROR() << "File pointer is null. Invalid use of function.";
+    MDF_ERROR() << "File pointer is null. Invalid use of function.";
     return false;
   }
   if (!id_block_ || !hd_block_) {
-    LOG_ERROR() << "No ID or HD block defined. Invalid use of function.";
+    MDF_ERROR() << "No ID or HD block defined. Invalid use of function.";
     return false;
   }
   try {
     id_block_->Write(file);
     hd_block_->Write(file);
   } catch (const std::exception& err) {
-    LOG_ERROR() << "Failed to write MDF3 file. Error: " << err.what();
+    MDF_ERROR() << "Failed to write MDF3 file. Error: " << err.what();
   }
   return true;
 }

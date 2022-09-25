@@ -7,7 +7,7 @@ project(mdflib
         LANGUAGES CXX)
 
 option(BUILD_SHARED_LIBS "Static libraries are preferred." OFF)
-option(MDF_BUILD_DOC "Build documentation. Requires Doxygen and Release mode." ON)
+option(MDF_BUILD_DOC "Build documentation. Requires Doxygen and Release mode." OFF)
 option(MDF_BUILD_TEST "Build Google unit tests. Requires Google Test." ON)
 option(MDF_BUILD_TOOL "Build tools like the MDF Viewer. Requires WxWidgets." ON)
 set(COMP_DIR "k:" CACHE PATH "Components root directory. Components like Boost, wxWidgets.")
@@ -15,11 +15,11 @@ set(COMP_DIR "k:" CACHE PATH "Components root directory. Components like Boost, 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_DEBUG_POSTFIX d)
 
-include("script/boost.cmake")
-include("script/utillib.cmake")
+# include("script/boost.cmake")
+# include("script/utillib.cmake")
 include("script/zlib.cmake")
 include("script/expat.cmake")
-#include("script/openssl.cmake")
+
 include("script/wxwidgets.cmake")
 include("script/googletest.cmake")
 include("script/doxygen.cmake")
@@ -95,17 +95,29 @@ add_library(mdf STATIC
         src/ri4block.cpp src/ri4block.h
         src/ld4block.cpp src/ld4block.h
         src/cryptoutil.cpp include/mdf/cryptoutil.h
-        src/zlibutil.cpp include/mdf/zlibutil.h)
+        src/zlibutil.cpp include/mdf/zlibutil.h
+        src/ixmlfile.cpp src/ixmlfile.h
+        src/ixmlnode.cpp src/ixmlnode.h
+        src/writexml.cpp src/writexml.h
+        src/xmlnode.cpp src/xmlnode.h
+        src/expatxml.cpp src/expatxml.h
+        src/mdflogstream.cpp include/mdf/mdflogstream.h src/littlebuffer.cpp src/littlebuffer.h src/bigbuffer.cpp src/bigbuffer.h
+        src/platform.cpp
+    )
+
+target_link_libraries(mdf ${ZLIB_LIBRARIES} ${EXPAT_LIBRARIES})
 
 target_include_directories(mdf PUBLIC
         $<INSTALL_INTERFACE:include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         )
-target_include_directories(mdf PRIVATE ${Boost_INCLUDE_DIRS})
-target_include_directories(mdf PRIVATE ${utillib_SOURCE_DIR}/include)
+# target_include_directories(mdf PRIVATE ${Boost_INCLUDE_DIRS})
+# target_include_directories(mdf PRIVATE ${utillib_SOURCE_DIR}/include)
 target_include_directories(mdf PRIVATE ${ZLIB_INCLUDE_DIRS})
+target_include_directories(mdf PRIVATE ${EXPAT_INCLUDE_DIRS})
 
-target_compile_definitions(util PRIVATE XML_STATIC)
+target_compile_definitions(mdf PRIVATE XML_STATIC)
+
 set(MDF_PUBLIC_HEADERS
         include/mdf/iattachment.h
         include/mdf/ichannel.h
@@ -114,20 +126,32 @@ set(MDF_PUBLIC_HEADERS
         include/mdf/ichannelobserver.h
         include/mdf/idatagroup.h
         include/mdf/isampleobserver.h
+        include/mdf/samplerecord.h
+        include/mdf/iheader.h
         include/mdf/mdffile.h
         include/mdf/mdfreader.h
+        include/mdf/mdfhelper.h # TODO: is there a possibility to get this away?
 )
 
 set_target_properties(mdf PROPERTIES PUBLIC_HEADER "${MDF_PUBLIC_HEADERS}")
 get_target_property(PH1 mdf PUBLIC_HEADER)
 message( STATUS "MDF Target Includes: " "${PH1}")
 
+if (WIN32)
 install(TARGETS mdf
         EXPORT MdfLibTargets
         LIBRARY DESTINATION mdf/lib
         ARCHIVE DESTINATION mdf/lib
         RUNTIME DESTINATION mdf/bin
         PUBLIC_HEADER DESTINATION mdf/include/mdf)
+else()
+    install(TARGETS mdf
+            EXPORT MdfLibTargets
+            LIBRARY DESTINATION lib
+            ARCHIVE DESTINATION lib
+            RUNTIME DESTINATION bin
+            PUBLIC_HEADER DESTINATION include/mdf)
+endif()
 
 if (wxWidgets_FOUND AND MDF_BUILD_TOOL)
     add_subdirectory(mdfviewer)
@@ -148,3 +172,42 @@ if (DOXYGEN_FOUND AND (CMAKE_BUILD_TYPE MATCHES "^[Rr]elease") AND MDF_BUILD_DOC
             include/mdf doxygen
             COMMENT "MDF Library generating API documentation with Doxygen")
 endif()
+
+######################################################################################
+# Packaging
+######################################################################################
+# https://cmake.org/cmake/help/latest/manual/cmake-packages.7.html#creating-a-package-configuration-file
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/mdflib/mdflibConfigVersion.cmake"
+  VERSION ${Upstream_VERSION}
+  COMPATIBILITY AnyNewerVersion
+)
+
+export(EXPORT MdfLibTargets
+  FILE "${CMAKE_CURRENT_BINARY_DIR}/mdflib/mdflibTargets.cmake"
+  NAMESPACE Upstream::
+)
+configure_file(cmake/MdfLibConfig.cmake
+  "${CMAKE_CURRENT_BINARY_DIR}/mdflib/MdfLibConfig.cmake"
+  COPYONLY
+)
+
+set(ConfigPackageLocation lib/cmake/mdflib)
+install(EXPORT MdfLibTargets
+  FILE
+    MdfLibTargets.cmake
+  NAMESPACE
+    Upstream::
+  DESTINATION
+    ${ConfigPackageLocation}
+)
+install(
+  FILES
+    cmake/MdfLibConfig.cmake
+    "${CMAKE_CURRENT_BINARY_DIR}/mdflib/mdflibConfigVersion.cmake"
+  DESTINATION
+    ${ConfigPackageLocation}
+  COMPONENT
+    Devel
+)

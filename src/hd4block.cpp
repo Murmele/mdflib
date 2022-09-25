@@ -2,10 +2,11 @@
  * Copyright 2021 Ingemar Hedvall
  * SPDX-License-Identifier: MIT
  */
+#include <algorithm>
+#include <ranges>
 #include "hd4block.h"
-#include "util/ixmlfile.h"
-
-using namespace util::xml;
+#include "ixmlfile.h"
+#include <algorithm>
 
 namespace {
   // LINK index
@@ -23,7 +24,7 @@ T GetCommonProperty(const mdf::detail::Hd4Block& block, const std::string &key) 
   if (md4 == nullptr || md4->IsTxtBlock()) {
     return {};
   }
-  auto xml_file = util::xml::CreateXmlFile("Expat");
+  auto xml_file = mdf::CreateXmlFile("Expat");
   xml_file->ParseString(md4->Text());
   const auto* common = xml_file->GetNode("common_properties");
   if (common == nullptr) {
@@ -35,7 +36,7 @@ T GetCommonProperty(const mdf::detail::Hd4Block& block, const std::string &key) 
 
 template <typename T>
 void SetCommonProperty(mdf::detail::Hd4Block& block, const std::string &key, const T &value) {
-  auto xml_file = util::xml::CreateXmlFile("Expat");
+  auto xml_file = mdf::CreateXmlFile("Expat");
   const auto* md4 = block.Md4();
   if (md4 != nullptr) {
     xml_file->ParseString(md4->Text());
@@ -65,7 +66,7 @@ Hd4Block::Hd4Block() {
   block_type_ = "##HD";
 }
 
-const IBlock *Hd4Block::Find(fpos_t index) const {
+const IBlock *Hd4Block::Find(int64_t index) const {
   if (index <= 0) {
     return nullptr;
   }
@@ -248,7 +249,7 @@ std::string Hd4Block::Subject() const {
 }
 
 void Hd4Block::Description(const std::string &description) {
-  auto xml_file = util::xml::CreateXmlFile("Expat");
+  auto xml_file = CreateXmlFile("Expat");
   const auto* md4 = Md4();
   if (md4 != nullptr) {
     xml_file->ParseString(md4->Text());

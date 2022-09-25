@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 #pragma once
+#include <cstdint>
 #include <string>
 #include <memory>
 #include <vector>
@@ -10,19 +11,18 @@
 #include <iomanip>
 #include <cstdio>
 
-#include <boost/endian/conversion.hpp>
-#include <boost/endian/buffers.hpp>
-
-#include "blockproperty.h"
 #include "mdf/imetadata.h"
+#include "blockproperty.h"
+#include "bigbuffer.h"
+#include "littlebuffer.h"
 
 namespace mdf::detail {
 
 class Md4Block;
 using BlockPropertyList = std::vector<BlockProperty>;
 
-std::fpos_t GetFilePosition(std::FILE *file);
-void SetFilePosition(std::FILE *file, std::fpos_t position);
+int64_t GetFilePosition(std::FILE *file);
+void SetFilePosition(std::FILE *file, int64_t position);
 void SetFirstFilePosition(std::FILE *file);
 
 size_t StepFilePosition(std::FILE* file, size_t steps);
@@ -80,9 +80,9 @@ class IBlock {
   virtual ~IBlock() = default;
 
   virtual void GetBlockProperty(BlockPropertyList& dest) const;
-  [[nodiscard]] virtual const IBlock* Find(fpos_t index) const;
+  [[nodiscard]] virtual const IBlock* Find(int64_t index) const;
 
-  [[nodiscard]] fpos_t FilePosition() const {
+  [[nodiscard]] int64_t FilePosition() const {
     return file_position_;
   }
 
@@ -128,8 +128,8 @@ class IBlock {
   uint16_t byte_order_ = 0; ///< Default set to Intel (little) byte order.
   uint16_t version_ = 420;  ///< Default set to 4.2.
 
-  fpos_t file_position_ = 0;       ///< 64-bit file position.
-  std::string block_type_;         ///< MDF header. MDF3 has 2 characters. MDF4 has 4 characters.
+  int64_t file_position_ = 0;   ///< 64-bit file position.
+  std::string block_type_;      ///< MDF header. MDF3 has 2 characters. MDF4 has 4 characters.
   uint16_t block_size_ = 0;     ///< MDF3 16-bit block size.
   uint64_t block_length_ = 0;   ///< MDF4 64-bit block size.
   uint64_t link_count_ = 0;     ///< MDF4 number of links.
@@ -166,14 +166,14 @@ class IBlock {
   template<typename T>
   std::size_t ReadNumber(std::FILE *file, T &dest) const {
     if (IsBigEndian()) {
-      boost::endian::endian_buffer<boost::endian::order::big, T, sizeof(T) * 8> buff;
+      BigBuffer<T> buff;
       auto count = std::fread(buff.data(), sizeof(T), 1, file);
       if (count != 1) {
         throw std::ios_base::failure("Invalid number of bytes read");
       }
       dest = buff.value();
     } else {
-      boost::endian::endian_buffer<boost::endian::order::little, T, sizeof(T) * 8> buff;
+      LittleBuffer<T> buff;
       auto count = std::fread(buff.data(), sizeof(T), 1, file);
       if (count != 1) {
         throw std::ios_base::failure("Invalid number of bytes read");
@@ -189,13 +189,13 @@ class IBlock {
       throw std::runtime_error("File pointer is null. Invalid use of function.");
     }
     if (IsBigEndian()) {
-      boost::endian::endian_buffer<boost::endian::order::big, T, sizeof(T) * 8> buff(source);
+      const BigBuffer buff(source);
       auto count = std::fwrite(buff.data(), 1, sizeof(T),  file);
       if (count != sizeof(T)) {
         throw std::runtime_error("Invalid number of bytes written");
       }
     } else {
-      boost::endian::endian_buffer<boost::endian::order::little, T, sizeof(T) * 8> buff(source);
+      const LittleBuffer buff(source);
       auto count = std::fwrite(buff.data(), 1, sizeof(T), file);
       if (count != sizeof(T)) {
         throw std::runtime_error("Invalid number of bytes written");

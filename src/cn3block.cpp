@@ -4,7 +4,10 @@
  */
 #include "cn3block.h"
 #include "cg3block.h"
-#include "util/stringutil.h"
+#include "mdf/mdfhelper.h"
+
+#include <limits>
+
 namespace {
 constexpr size_t kIndexNext = 0;
 constexpr size_t kIndexCc = 1;
@@ -157,9 +160,9 @@ void Cn3Block::GetBlockProperty(BlockPropertyList &dest) const {
   dest.emplace_back("Signal Data Type", std::to_string(signal_type_),
                      signal_type_ < 17 ? kTypeList[signal_type_].data() :"Unknown Type");
   dest.emplace_back("Signal Data Type", range_valid_ ? "True" : "False");
-  dest.emplace_back("Min Range", util::string::FormatDouble(min_, 6));
-  dest.emplace_back("Max Range", util::string::FormatDouble(max_, 6));
-  dest.emplace_back("Sampling Rate [s]", util::string::FormatDouble(sample_rate_, 3));
+  dest.emplace_back("Min Range", MdfHelper::FormatDouble(min_, 6));
+  dest.emplace_back("Max Range", MdfHelper::FormatDouble(max_, 6));
+  dest.emplace_back("Sampling Rate [s]", MdfHelper::FormatDouble(sample_rate_, 3));
   dest.emplace_back("Long Nane", long_name_);
   dest.emplace_back("Display Nane", display_name_);
   dest.emplace_back("Byte Offset", std::to_string(byte_offset_));
@@ -319,7 +322,7 @@ std::string Cn3Block::Comment() const {
   return comment_;
 }
 
-const IBlock *Cn3Block::Find(fpos_t index) const {
+const IBlock *Cn3Block::Find(int64_t index) const {
   if (cc_block_) {
     const auto* p = cc_block_->Find(index);
     if (p != nullptr) {

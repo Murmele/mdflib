@@ -9,24 +9,28 @@
 #include <cerrno>
 #include <cstring>
 #include <chrono>
-#include <util/logstream.h>
+#include <mdf/mdflogstream.h>
+#include <mdf/idatagroup.h>
+#include <string.h>
+#include <algorithm>
 #include "mdf/mdfwriter.h"
 #include "iblock.h"
+#include "platform.h"
 
 
 using namespace std::filesystem;
-using namespace util::log;
 using namespace std::chrono_literals;
 
 namespace {
 
-std::string StrErrNo(errno_t error) {
+std::string StrErrNo(int error) {
   std::string err_str(200,'\0');
-  strerror_s(err_str.data(), err_str.size(), error);
+  Platform::strerror(error, err_str.data(), err_str.size());
   return err_str;
 }
 
 }
+
 namespace mdf {
 
 MdfWriter::~MdfWriter() {
@@ -47,6 +51,10 @@ IDataGroup *MdfWriter::CreateDataGroup() {
   return !mdf_file_ ? nullptr : mdf_file_->CreateDataGroup();
 }
 
+IChannelGroup* MdfWriter::CreateChannelGroup(IDataGroup* parent) {
+  return parent == nullptr ? nullptr : parent->CreateChannelGroup();
+}
+
 bool MdfWriter::Init(const std::string& filename) {
   bool init = false;
   CreateMdfFile();
@@ -64,10 +72,10 @@ bool MdfWriter::Init(const std::string& filename) {
         mdf_file_->ReadEverythingButData(file);
         std::fclose(file);
         write_state_ = WriteState::Finalize; // Append to the file
-        LOG_DEBUG() << "Reading existing file. File: " << filename_;
+        MDF_DEBUG() << "Reading existing file. File: " << filename_;
         init = true;
       } else {
-        LOG_ERROR() << "Failed to open the existing MDF file. File: " << filename_;
+        MDF_ERROR() << "Failed to open the existing MDF file. File: " << filename_;
         write_state_ = WriteState::Create;
       }
     } else {
@@ -79,11 +87,11 @@ bool MdfWriter::Init(const std::string& filename) {
     if (file != nullptr) {
       fclose(file);
       write_state_ = WriteState::Finalize;
-      LOG_ERROR() << "Failed to read the existing MDF file. Error: " << err.what()
+      MDF_ERROR() << "Failed to read the existing MDF file. Error: " << err.what()
                   << ", File: " << filename_;
     } else {
       write_state_ = WriteState::Create;
-      LOG_ERROR() << "Failed to open the existing MDF file. Error: " << err.what()
+      MDF_ERROR() << "Failed to open the existing MDF file. Error: " << err.what()
                   << ", File: " << filename_;
     }
   }
@@ -93,7 +101,7 @@ bool MdfWriter::Init(const std::string& filename) {
 bool MdfWriter::InitMeasurement() {
   StopWorkThread(); // Just in case
   if (!mdf_file_) {
-    LOG_ERROR() << "The MDF file is not created. Invalid use of the function.";
+    MDF_ERROR() << "The MDF file is not created. Invalid use of the function.";
     return false;
   }
 
@@ -101,7 +109,7 @@ bool MdfWriter::InitMeasurement() {
   std::FILE* file = nullptr;
   detail::OpenMdfFile(file, filename_, write_state_ == WriteState::Create ? "wb" : "r+b");
   if (file == nullptr) {
-    LOG_ERROR() << "Failed to open the file for writing. File: " << filename_;
+    MDF_ERROR() << "Failed to open the file for writing. File: " << filename_;
     return false;
   }
 
@@ -152,14 +160,14 @@ bool MdfWriter::FinalizeMeasurement() {
 
   // Save outstanding SR and any legal updates
   if (!mdf_file_) {
-    LOG_ERROR() << "The MDF file is not created. Invalid use of the function.";
+    MDF_ERROR() << "The MDF file is not created. Invalid use of the function.";
     return false;
   }
 
   std::FILE* file = nullptr;
   detail::OpenMdfFile(file, filename_, "r+b");
   if (file == nullptr) {
-    LOG_ERROR() << "Failed to open the file for writing. File: " << filename_;
+    MDF_ERROR() << "Failed to open the file for writing. File: " << filename_;
     return false;
   }
   const bool write = mdf_file_ && mdf_file_->Write(file);
@@ -225,7 +233,7 @@ void MdfWriter::WorkThread() {
 void MdfWriter::SaveQueue(std::unique_lock<std::mutex>& lock) {
   lock.unlock();
   std::FILE* file = nullptr;
-  fopen_s(&file, filename_.c_str(), "r+b");
+  Platform::fileopen(&file, filename_.c_str(), "r+b");
   if (file == nullptr) {
     lock.lock();
     return;
@@ -283,7 +291,7 @@ void MdfWriter::CleanQueue(std::unique_lock<std::mutex>& lock) {
 
   lock.unlock();
   std::FILE* file = nullptr;
-  fopen_s(&file, filename_.c_str(), "r+b");
+  Platform::fileopen(&file, filename_.c_str(), "r+b");
   if (file == nullptr) {
     lock.lock();
     return;
